@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SmartStudy AI | Fresh Session</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4f46e5; --secondary: #ec4899; --accent: #10b981;
+            --bg: #030712; --card: rgba(17, 24, 39, 0.7); --border: rgba(255, 255, 255, 0.1);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Outfit', sans-serif; }
+        body { background: radial-gradient(circle at 0% 0%, #1e1b4b 0%, #030712 100%); color: #f8fafc; min-height: 100vh; }
+
+        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+        
+        .glass-card { 
+            background: var(--card); border: 1px solid var(--border); border-radius: 24px; 
+            padding: 30px; backdrop-filter: blur(12px); margin-bottom: 25px; 
+        }
+
+        header { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; }
+        
+        .progress-box { height: 10px; background: rgba(255,255,255,0.1); border-radius: 10px; margin: 10px 0; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: 0.5s ease; }
+
+        .tt-table { width: 100%; border-collapse: separate; border-spacing: 0 10px; }
+        .tt-row { background: rgba(255, 255, 255, 0.03); cursor: pointer; border-left: 4px solid var(--primary); }
+        .tt-row td { padding: 15px; }
+        .tt-row.completed { opacity: 0.3; text-decoration: line-through; pointer-events: none; }
+
+        input, select, textarea { width: 100%; padding: 15px; border-radius: 12px; background: rgba(0,0,0,0.5); border: 1px solid var(--border); color: white; margin-top: 8px; }
+        .btn { background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; border: none; padding: 16px; border-radius: 15px; font-weight: 800; cursor: pointer; width: 100%; margin-top: 15px; }
+
+        #onboarding { position: fixed; inset: 0; background: var(--bg); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+        .time-pill { background: var(--primary); padding: 5px 12px; border-radius: 20px; display: inline-flex; align-items: center; gap: 8px; margin: 5px; font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+
+<div id="onboarding">
+    <div class="glass-card" style="max-width: 500px; width: 90%;">
+        <h2 style="margin-bottom: 15px;">Initialize New Session</h2>
+        <input type="text" id="set-name" placeholder="Enter Name (e.g. Abhay)">
+        <select id="set-board">
+            <option value="">Select Board</option>
+            <option>CBSE</option><option>ICSE</option><option>State Board</option>
+        </select>
+        <input type="text" id="set-class" placeholder="Class (e.g. 8)">
+        <input type="text" id="set-weak" placeholder="Weak Subjects (Math, Science)">
+        <input type="text" id="set-strong" placeholder="Strong Subjects (English, SST)">
+        <input type="number" id="set-target" placeholder="Target Goal %">
+        <button class="btn" onclick="startApp()">Launch Dashboard</button>
+    </div>
+</div>
+
+<div class="container" id="main-content" style="display:none;">
+    <header>
+        <div>
+            <h1 id="ui-name">User</h1>
+            <p id="ui-profile" style="color: var(--primary); font-size: 0.8rem;"></p>
+        </div>
+        <div style="text-align: right;">
+            <p style="font-size: 0.7rem;">DAILY READINESS</p>
+            <h2 id="ready-percent" style="color: var(--accent);">0%</h2>
+        </div>
+    </header>
+
+    <div class="progress-box"><div class="progress-fill" id="ready-bar"></div></div>
+
+    <div class="glass-card">
+        <h3>🕒 Step 1: Set Today's Rhythm</h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 0.5fr; gap: 10px;">
+            <input type="time" id="pref-start">
+            <input type="time" id="pref-end">
+            <button class="btn" style="margin-top: 8px;" onclick="addSlot()">Add</button>
+        </div>
+        <div id="slot-list" style="margin-top: 10px;"></div>
+        <button class="btn" style="background: var(--accent);" onclick="generateTable()">Generate Daily Timetable</button>
+    </div>
+
+    <div id="table-area" style="display:none;">
+        <div class="glass-card">
+            <h3>📅 Schedule (Click to complete)</h3>
+            <table class="tt-table"><tbody id="tt-body"></tbody></table>
+        </div>
+    </div>
+
+    <div class="glass-card">
+        <h3>🤖 Step 2: AI Mentor</h3>
+        <textarea id="ai-query" rows="2" placeholder="Ask a question..."></textarea>
+        <button class="btn" onclick="askAI()">Search & Solve</button>
+        <div id="ai-resp" style="display:none; margin-top:15px; padding:15px; border-left:4px solid var(--primary); background:rgba(0,0,0,0.2);"></div>
+    </div>
+</div>
+
+<script>
+let userData = null;
+let sessions = [];
+
+// This runs when you click Launch
+function startApp() {
+    userData = {
+        name: document.getElementById('set-name').value,
+        board: document.getElementById('set-board').value,
+        grade: document.getElementById('set-class').value,
+        weak: document.getElementById('set-weak').value.split(','),
+        strong: document.getElementById('set-strong').value.split(','),
+        target: document.getElementById('set-target').value,
+        readiness: 0
+    };
+
+    if(!userData.name || !userData.board) return alert("Please fill all details!");
+
+    document.getElementById('onboarding').style.display = 'none';
+    document.getElementById('main-content').style.display = 'block';
+    
+    document.getElementById('ui-name').innerText = "Welcome, " + userData.name;
+    document.getElementById('ui-profile').innerText = `${userData.board} Board | Class ${userData.grade} | Goal: ${userData.target}%`;
+}
+
+function addSlot() {
+    const s = document.getElementById('pref-start').value;
+    const e = document.getElementById('pref-end').value;
+    if(s && e) {
+        sessions.push({s, e});
+        const list = document.getElementById('slot-list');
+        list.innerHTML += `<div class="time-pill">${s} - ${e}</div>`;
+    }
+}
+
+function generateTable() {
+    document.getElementById('table-area').style.display = 'block';
+    const body = document.getElementById('tt-body');
+    body.innerHTML = '';
+    const subs = [...userData.weak, ...userData.strong];
+    let idx = 0;
+
+    sessions.forEach(slot => {
+        let start = toMins(slot.s);
+        let end = toMins(slot.e);
+        while(start < end) {
+            let sub = subs[idx % subs.length];
+            let dur = userData.weak.includes(sub) ? 35 : 25;
+            if(start + dur > end) dur = end - start;
+            if(dur < 10) break;
+
+            body.innerHTML += `
+                <tr class="tt-row" onclick="markDone(this, 5)">
+                    <td>${fmt(start)} - ${fmt(start+dur)}</td>
+                    <td><strong>${sub}</strong><br><small>+5% Readiness on completion</small></td>
+                </tr>`;
+            start += dur;
+            if(start + 5 <= end) {
+                body.innerHTML += `<tr class="tt-row" style="border-left-color:var(--accent)" onclick="markDone(this, 2)"><td>${fmt(start)} - ${fmt(start+5)}</td><td>Break</td></tr>`;
+                start += 5;
+            }
+            idx++;
+        }
+    });
+}
+
+function markDone(el, amt) {
+    el.classList.add('completed');
+    userData.readiness = Math.min(100, userData.readiness + amt);
+    document.getElementById('ready-percent').innerText = userData.readiness + "%";
+    document.getElementById('ready-bar').style.width = userData.readiness + "%";
+}
+
+function toMins(t) { let [h, m] = t.split(':').map(Number); return h * 60 + m; }
+function fmt(m) { 
+    let h = Math.floor(m / 60) % 24; 
+    let mins = m % 60; 
+    let ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${mins.toString().padStart(2, '0')} ${ampm}`;
+}
+
+function askAI() {
+    const q = document.getElementById('ai-query').value;
+    const res = document.getElementById('ai-resp');
+    if(!q) return;
+    res.style.display = 'block';
+    res.innerHTML = `Searching ${userData.board} database...`;
+    setTimeout(() => {
+        res.innerHTML = `<strong>Mentor:</strong> For ${userData.board} Class ${userData.grade}, "${q}" is an important topic. Focus on your textbook definitions for your ${userData.target}% goal.`;
+        userData.readiness = Math.min(100, userData.readiness + 5);
+        document.getElementById('ready-percent').innerText = userData.readiness + "%";
+        document.getElementById('ready-bar').style.width = userData.readiness + "%";
+    }, 1000);
+}
+</script>
+</body>
+</html>
